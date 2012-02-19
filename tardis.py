@@ -5,6 +5,8 @@ import pprint
 from ramirez.iod import iodclient
 from ramirez.iod import iod_proto
 
+# TODO the manual button is mixed up with the mode:cont switch, need to reroute something.
+
 class SPDT(object) :
 	"""
 	mapping shall be a dictionary from channel number to string state name. if channel number is None,
@@ -50,6 +52,7 @@ class Tardis(object) :
 			0 : "master stop",
 			1 : "arm",
 			2 : "hv off",
+			4 : "shutter",
 			5 : "master start",
 			6 : "interlock open",
 			7 : "hv on",
@@ -58,12 +61,14 @@ class Tardis(object) :
 			10 : "current",
 			11 : "dial",
 			17 : mode,
+			18 : "magic",
 		}
 
 		self.channels = [
 			(0, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
 			(1, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(2, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
+			(4, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(5, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(6, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
 			(7, iod_proto.CHANNELTYPE_DIGITAL, None),
@@ -72,6 +77,7 @@ class Tardis(object) :
 			(10, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 3.3642578125, 0.0, 0.0, 5.0)),
 			(11, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 0.0, 3.26171875, 0.0, 1000)),
 			(17, iod_proto.CHANNELTYPE_DIGITAL, None),
+			(18, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
 		]
 		self.chans = [(n,t) for (n,t,f) in self.channels]
 		self.chantransforms = dict([(n,f) for (n,t,f) in self.channels])

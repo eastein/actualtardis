@@ -68,7 +68,7 @@ mode
 		nothing
 
 switch
-	g41/30
+	g41/26
 	flipped down = closed
 	dyio 18
 
