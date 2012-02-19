@@ -54,7 +54,7 @@ shutter close/open
 mode
 	ext
 		g41/61
-		normally closed
+		nc
 		dyio 8
 	cont
 		g41/60
