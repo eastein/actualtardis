@@ -1,0 +1,81 @@
+Master Stop
+	Normally Closed
+	g343/342
+	dyio 0
+
+Master Start
+	no
+	g343/344
+	dyio 5
+
+Arm
+	no
+	g343/341
+	dyio 1
+
+Interlock Open
+	nc
+	g35/5
+	switch is a little funky, contacts might be funky
+	dyio 6
+
+hv on
+	g35/31
+	no
+	dyio 7
+
+hv off
+	g35/32
+	nc
+	dyio 2
+
+manual
+	g35/60
+	no
+	dyio 3
+
+gas
+	off
+		g130/132
+		normally open (off position = closed)
+		dyio 18
+	open cycle
+		nothing (both off and recirc not being closed means open cycle)
+	recirc
+		g130/131
+		normally open (recirc position = closed)
+		dyio 19
+
+shutter close/open
+	g35/70
+	normally closed
+	dyio 4
+
+mode
+	ext
+		g41/61
+		normally closed
+		dyio 8
+	cont
+		g41/60
+		nc
+		dyio 9
+	reset
+		g41/66
+		nc
+		dyio 17
+	man	
+		nothing
+
+switch
+	g41/30
+	flipped down = closed
+	dyio 18
+
+resistors
+	knobby one
+		65/63
+		dyio 10
+	dial one
+		65/64
+		dyio 11
