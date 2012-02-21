@@ -18,7 +18,28 @@ This is code for sending video messages to the future using specialized hardware
 
 * messages cannot be sent if the arm switch is disabled.
 * use the open shutter control to open the iris that allows the camera and mic to come into view.
+* set the mode switch. This will apply video filters.
 * Use the two rheostats to specify how far into the future to send the message and how long a message to record.  TODO determine how to key in finer resolution than hours.  Perhaps the little toggle switch should indicate if it's in days or hours.
 * Press HV on to start recording.
 * Press HV off to cancel recording up to the moment when it's too late and you've already sent the message into the future.
 * If you didn't press HV off, the message will be sent.  This will be indicated by the gas recirculation light and the HV on lights blinking at random, the tardis sound and light, and the Days display output pulsing back and forth on a uniform distribution between 0 and the number of days to send the message.
+
+# Internals
+
+Videos will be stored on the filesystem, named by the primary key of the videos table in the database.
+
+A timestamped queue of incoming videos will exist.  Each row will have:
+
+* video id
+* recording length
+* origin timestamp
+* deferral count
+* original delivery timestamp
+
+There will also be a persisted event queue that will include the timestamp the event was created, the timestamp that it will execute, and a json blob that contains what the event is.  Some events will include:
+
+* receipt of video on queue
+* play of video
+* wait on motion in room to play video
+* timeout on master stop state
+* ...?
