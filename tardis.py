@@ -93,8 +93,9 @@ class Tardis(object) :
 		slope = (tmax - tmin) / (vmax - vmin)
 		t = tmin + (v - vmin) * slope
 		return min(tmax, max(tmin, t))
-	
+
 	def sample(self) :
+		dat = dict()
 		d = dict()
 		s = self.ioc.sample([n for n,t,f in self.channels])
 		for n,v in s :
@@ -104,21 +105,23 @@ class Tardis(object) :
 			else :
 				d[n] = ct(v)
 
-		#pprint.pprint(d)
-
 		print 'sample:'
 		for c in d :
 			mapped = self.mappings[c]
 			if isinstance(mapped, SPDT) :
 				mapped.measurement(c, d[c])
 			else :
+				dat[mapped] = d[c]
 				print ' %s: %s' % (mapped.ljust(20), d[c])
 
 		for m in set([self.mappings[m] for m in self.mappings if isinstance(self.mappings[m], SPDT)]) :
+			dat[m.name] = m.state
 			print ' %s: %s' % (m.name.ljust(20), m.state)
+
+		pprint.pprint(dat)
 
 if __name__ == '__main__' :
 	t = Tardis()
 	while True :
 		t.sample()
-		time.sleep(.2)
+		time.sleep(.1)
