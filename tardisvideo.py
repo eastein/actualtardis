@@ -2,6 +2,7 @@ import subprocess
 import tempfile
 import os
 import signal
+import time
 
 # TODO stuff like not leaving child processes lying around unwaited for, stopping all by default when Video is shutdown
 
@@ -9,6 +10,7 @@ class Recording(object) :
 	def __init__(self, directory, filename=None) :
 		if filename is None :
 			self.filename = tempfile.mktemp(suffix='.mpg', dir=directory)
+			self.recording_start = time.time()
 			self.proc = subprocess.Popen(['cvlc', 'v4l2://', ':v4l-vdev=/dev/video0', ':v4l-adev=/dev/audio1', '--sout', '#transcode{vcodec=mp2v,vb=1024,scale=1,acodec=mpga,ab=192,channels=2}:duplicate{dst=std{access=file,mux=mpeg1,dst=%s}}' % self.filename], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		else :
 			self.filename = filename

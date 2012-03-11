@@ -265,15 +265,17 @@ if __name__ == '__main__' :
 
 		# Recording stopper
 		elif state == ST_RECORDING :
-			if e :
+			# TODO parameterize timeout
+			stop_recording = (e and e.input_object.name == "hvoff" and e.value == True) or (time.time() > recording.recording_start + 30)
+
+			if stop_recording :
 				# TODO make the recording end automatically if nobody ends it.  Heartbeat with a timeout.
-				if e.input_object.name == "hvoff" and e.value == True :
-					state = ST_NONE
-					recording.end()
-					deliver = time.time() + 10
-					video_data = {'filename' : recording.filename, 'deliver' : deliver}
-					working_data['videos'].append(video_data)
-					working_data['videos'].sort(cmp=lambda a,b: int.__cmp__(a['deliver'], b['deliver']))
+				state = ST_NONE
+				recording.end()
+				deliver = time.time() + 10
+				video_data = {'filename' : recording.filename, 'deliver' : deliver}
+				working_data['videos'].append(video_data)
+				working_data['videos'].sort(cmp=lambda a,b: int.__cmp__(a['deliver'], b['deliver']))
 	# well, eventually
 	print 'stopping the tardis, because we can'
 	t.stop()
