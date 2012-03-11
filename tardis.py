@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
+import Queue
 import time
 import pprint
+import threading
 from ramirez.iod import iodclient
 from ramirez.iod import iod_proto
+import tardisvideo
 
 # TODO the manual button is mixed up with the mode:cont switch, need to reroute something.
 
@@ -14,14 +17,23 @@ class Listener(object) :
 	def event(self, event) :
 		print event
 
+class QueueingListener(Listener) :
+	def __init__(self) :
+		Listener.__init__(self)
+		self.q = Queue.Queue()
+
+	def event(self, event) :
+		print 'new event for queue: %s' % event
+		self.q.put(event)
+
 class InputEvent(object) :
-	def __init__(self, input_object, old_value, new_value) :
+	def __init__(self, input_object, old_value, value) :
 		self.input_object = input_object
 		self.old_value = old_value
-		self.new_value = new_value
+		self.value = value
 
 	def __repr__(self) :
-		return '<InputEvent %s %s -> %s>' % (self.input_object, self.old_value, self.new_value)
+		return '<InputEvent %s %s -> %s>' % (self.input_object, self.old_value, self.value)
 
 class Input(object) :
 	def __init__(self, name) :
@@ -96,8 +108,11 @@ class Singular(Input) :
 	def state(self) :
 		return self._state
 
-class Tardis(object) :
+class Tardis(threading.Thread) :
 	def __init__(self) :
+		threading.Thread.__init__(self)
+		self.ok = True
+
 		mode = SPDT("mode", {
 			8 : "ext",
 			9 : "cont",
@@ -106,13 +121,13 @@ class Tardis(object) :
 		})
 
 		self.mappings = {
-			0 : Singular("master stop"),
+			0 : Singular("masterstop"),
 			1 : Singular("arm"),
-			2 : Singular("hv off"),
+			2 : Singular("hvoff"),
 			4 : Singular("shutter"),
-			5 : Singular("master start"),
-			6 : Singular("interlock open"),
-			7 : Singular("hv on"),
+			5 : Singular("masterstart"),
+			6 : Singular("interlockopen"),
+			7 : Singular("hvon"),
 			8 : mode,
 			9 : mode,
 			10 : Singular("current"),
@@ -120,9 +135,9 @@ class Tardis(object) :
 			17 : mode,
 			18 : Singular("magic"),
 		}
-		listener = Listener()
-		for i in self.mappings.values() :
-			i.register(listener)
+		self.qlistener = QueueingListener()
+		for i in set(self.mappings.values()) :
+			i.register(self.qlistener)
 
 		self.channels = [
 			(0, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
@@ -154,10 +169,19 @@ class Tardis(object) :
 		t = tmin + (v - vmin) * slope
 		return min(tmax, max(tmin, t))
 
+	def stop(self) :
+		self.ok = False
+	
+	def run(self) :
+		while self.ok :
+			t.sample()
+			time.sleep(.1)
+
 	def sample(self) :
 		dat = dict()
 		d = dict()
 		s = self.ioc.sample([n for n,t,f in self.channels])
+
 		for n,v in s :
 			ct = self.chantransforms[n]
 			if ct is None :
@@ -187,6 +211,17 @@ class Tardis(object) :
 
 if __name__ == '__main__' :
 	t = Tardis()
+	t.start()
+	
 	while True :
-		t.sample()
-		time.sleep(.1)
+		try :
+			e = t.qlistener.q.get(timeout=1)
+			if e.input_object.name == "masterstop" and e.value == True :
+				break # DONE
+		except Queue.Empty :
+			pass
+
+	# well, eventually
+	print 'stopping the tardis, because we can'
+	t.stop()
+	t.join()
