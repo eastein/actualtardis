@@ -26,7 +26,7 @@ class QueueingListener(Listener) :
 	def event(self, event) :
 		print 'new event for queue: %s' % event
 		self.q.put(event)
-
+		
 class InputEvent(object) :
 	def __init__(self, input_object, old_value, value) :
 		self.input_object = input_object
@@ -208,7 +208,7 @@ class Tardis(threading.Thread) :
 
 		dat = zip([(self.mappings[m].name, self.mappings[m]) for m in self.mappings])
 
-		#pprint.pprint(dat)
+		#pprint.pprint(dat)		
 
 if __name__ == '__main__' :
 	# setup tardis that polls the iod presumed to be running, start it 
@@ -227,31 +227,53 @@ if __name__ == '__main__' :
 
 	state = ST_NONE
 	recording = None
+	# this state must be persisted somehow.
+	working_data = dict()
+	working_data['videos'] = list()
 
 	while True :
 		try :
 			e = t.qlistener.q.get(timeout=1)
-			room_active = camsub.last_msg()
-			if room_active == None :
-				room_active = False
-			else :
-				room_active = ['ratio_busy'] > 0.05
-			
-			if state == ST_NONE :
-				if e.input_object.name == "masterstop" and e.value == True :
-					break
-				elif e.input_object.name == "hvon" and e.value == True :
-					state = ST_RECORDING
-					recording = recorder.record()
+		except Queue.Empty :
+			e = None
 
-			elif state == ST_RECORDING :
+		room_active = camsub.last_msg()
+		if room_active == None :
+			room_active = False
+		else :
+			room_active = ['ratio_busy'] > 0.05
+		
+		if state == ST_NONE and e :
+			if e.input_object.name == "masterstop" and e.value == True :
+				break
+
+			# Recording starter
+			elif e.input_object.name == "hvon" and e.value == True :
+				state = ST_RECORDING
+				recording = recorder.record()
+		
+		# Full Playback: we don't care if anything happened or not. Time happened.
+		if state == ST_NONE :
+			if room_active and working_data['videos'] :
+				if working_data['videos'][0]['deliver'] <= time.time() :
+					video_data = working_data['videos'][0]
+					working_data['videos'].remove(video_data)
+					recording = recorder.load(video_data['filename'])
+
+					# TODO don't cede control completely to playback.
+					recording.playback()
+
+		# Recording stopper
+		elif state == ST_RECORDING :
+			if e :
+				# TODO make the recording end automatically if nobody ends it.  Heartbeat with a timeout.
 				if e.input_object.name == "hvoff" and e.value == True :
 					state = ST_NONE
 					recording.end()
-
-		except Queue.Empty :
-			pass
-
+					deliver = time.time() + 10
+					video_data = {'filename' : recording.filename, 'deliver' : deliver}
+					working_data['videos'].append(video_data)
+					working_data['videos'].sort(cmp=lambda a,b: int.__cmp__(a['deliver'], b['deliver']))
 	# well, eventually
 	print 'stopping the tardis, because we can'
 	t.stop()
