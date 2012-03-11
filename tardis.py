@@ -7,6 +7,7 @@ import threading
 from ramirez.iod import iodclient
 from ramirez.iod import iod_proto
 import tardisvideo
+import zmqsub
 
 # TODO the manual button is mixed up with the mode:cont switch, need to reroute something.
 
@@ -210,14 +211,44 @@ class Tardis(threading.Thread) :
 		#pprint.pprint(dat)
 
 if __name__ == '__main__' :
+	# setup tardis that polls the iod presumed to be running, start it 
 	t = Tardis()
 	t.start()
+
+	# setup a zmq subscription to the ZeroMQ lidless api endpoint to determine if someone is 'in'
+	camsub = zmqsub.JSONZMQSub('tcp://127.0.0.1:7200')
 	
+	# setup a recorder to record/playback video.
+	recorder = tardisvideo.Recorder('/home/eastein/tardis')
+	
+	ST_NONE = 0
+	ST_RECORDING = 1
+	ST_PLAYBACK = 2
+
+	state = ST_NONE
+	recording = None
+
 	while True :
 		try :
 			e = t.qlistener.q.get(timeout=1)
-			if e.input_object.name == "masterstop" and e.value == True :
-				break # DONE
+			room_active = camsub.last_msg()
+			if room_active == None :
+				room_active = False
+			else :
+				room_active = ['ratio_busy'] > 0.05
+			
+			if state == ST_NONE :
+				if e.input_object.name == "masterstop" and e.value == True :
+					break
+				elif e.input_object.name == "hvon" and e.value == True :
+					state = ST_RECORDING
+					recording = recorder.record()
+
+			elif state == ST_RECORDING :
+				if e.input_object.name == "hvoff" and e.value == True :
+					state = ST_NONE
+					recording.end()
+
 		except Queue.Empty :
 			pass
 

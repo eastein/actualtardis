@@ -10,7 +10,7 @@ class Recording(object) :
 		self.filename = tempfile.mktemp(suffix='.mpg', dir=directory)
 		self.proc = subprocess.Popen(['cvlc', 'v4l2://', ':v4l-vdev=/dev/video0', ':v4l-adev=/dev/audio1', '--sout', '#transcode{vcodec=mp2v,vb=1024,scale=1,acodec=mpga,ab=192,channels=2}:duplicate{dst=std{access=file,mux=mpeg1,dst=%s}}' % self.filename], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-	def end_recording(self) :
+	def end(self) :
 		#print 'ending recording of %s' % self.filename
 		# don't do this twice, it's rude.
 		# TODO make something that threads off and if wait() isn't getting out in time, sends a more convincing signal?
