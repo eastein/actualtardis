@@ -79,3 +79,19 @@ resistors
 	dial one
 		65/64
 		dyio 11
+
+
+
+lights
+	interlock open
+		2 -> 28
+
+	hv on
+		2 -> 33
+
+	
+
+
+???
+
+TODO wire 60 is doubled up and that's broken

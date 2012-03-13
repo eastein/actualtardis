@@ -150,10 +150,12 @@ class Tardis(threading.Thread) :
 			(7, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(8, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(9, iod_proto.CHANNELTYPE_DIGITAL, None),
-			(10, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 3.3642578125, 0.0, 0.0, 5.0)),
+			(10, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 3.3642578125, 0.0, 0.0, 10.0)),
 			(11, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 0.0, 3.26171875, 0.0, 1000)),
 			(17, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(18, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
+			(22, iod_proto.CHANNELTYPE_DIGITALOUT, None),
+			(23, iod_proto.CHANNELTYPE_DIGITALOUT, None)
 		]
 		self.chans = [(n,t) for (n,t,f) in self.channels]
 		self.chantransforms = dict([(n,f) for (n,t,f) in self.channels])
@@ -163,6 +165,11 @@ class Tardis(threading.Thread) :
 			self.ioc.setup(self.chans)
 		except iod_proto.IODFailure :
 			print 'failed setup, must restart iod to reset, continuing.'
+
+	def get_value(self, name) :
+		for i in self.mappings.values() :
+			if i.name == name :
+				return i.state
 
 	def translate_range(self, v, vmin, vmax, tmin, tmax) :
 		# fix inverse function FIXME
@@ -181,7 +188,9 @@ class Tardis(threading.Thread) :
 	def sample(self) :
 		dat = dict()
 		d = dict()
-		s = self.ioc.sample([n for n,t,f in self.channels])
+		s = self.ioc.sample([n for n,t,f in self.channels if t != iod_proto.CHANNELTYPE_DIGITALOUT])
+
+		#print 'sample result is %s' % s
 
 		for n,v in s :
 			ct = self.chantransforms[n]
@@ -241,7 +250,7 @@ if __name__ == '__main__' :
 		if room_active == None :
 			room_active = False
 		else :
-			room_active = ['ratio_busy'] > 0.05
+			room_active = ['ratio_busy'] > .4
 		
 		if state == ST_NONE and e :
 			if e.input_object.name == "masterstop" and e.value == True :
@@ -251,28 +260,47 @@ if __name__ == '__main__' :
 			elif e.input_object.name == "hvon" and e.value == True :
 				state = ST_RECORDING
 				recording = recorder.record()
+				t.ioc.set([(22, True)])
 		
 		# Full Playback: we don't care if anything happened or not. Time happened.
 		if state == ST_NONE :
 			if room_active and working_data['videos'] :
 				if working_data['videos'][0]['deliver'] <= time.time() :
-					video_data = working_data['videos'][0]
-					working_data['videos'].remove(video_data)
-					recording = recorder.load(video_data['filename'])
+					t.ioc.set([(23, True)])
 
-					# TODO don't cede control completely to playback.
-					recording.playback()
+					if e and e.input_object.name == "interlockopen" and e.value == True :
+						t.ioc.set([(23, False)])
+
+						video_data = working_data['videos'][0]
+						working_data['videos'].remove(video_data)
+						recording = recorder.load(video_data['filename'])
+
+						# TODO don't cede control completely to playback.
+						recording.playback()
 
 		# Recording stopper
 		elif state == ST_RECORDING :
 			# TODO parameterize timeout
-			stop_recording = (e and e.input_object.name == "hvoff" and e.value == True) or (time.time() > recording.recording_start + 30)
+			stop_recording = (e and e.input_object.name == "hvoff" and e.value == True) or (time.time() > recording.recording_start + 300)
 
 			if stop_recording :
 				# TODO make the recording end automatically if nobody ends it.  Heartbeat with a timeout.
 				state = ST_NONE
 				recording.end()
-				deliver = time.time() + 10
+				t.ioc.set([(22, False)])
+
+				delay = t.get_value("current")
+				if delay :
+					if delay == 10.0 : # if the current dial is for some reason totally out of wack, ignore. FIXME!
+						delay = 10.0
+					else :	
+						delay = int(60 * delay)
+				else :
+					delay = 0
+
+				print 'delaying %d seconds' % delay
+
+				deliver = int(time.time()) + delay
 				video_data = {'filename' : recording.filename, 'deliver' : deliver}
 				working_data['videos'].append(video_data)
 				working_data['videos'].sort(cmp=lambda a,b: int.__cmp__(a['deliver'], b['deliver']))
