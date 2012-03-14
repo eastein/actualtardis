@@ -3,6 +3,7 @@ import tempfile
 import os
 import signal
 import time
+import threading
 
 # TODO stuff like not leaving child processes lying around unwaited for, stopping all by default when Video is shutdown
 
@@ -28,6 +29,17 @@ class Recording(object) :
 
 	def playback(self) :
 		self.proc = subprocess.Popen(['vlc', '--fullscreen', self.filename, 'vlc://quit'], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		out, err = self.proc.communicate()
+		self.proc.wait()
+
+class PlayMP3(threading.Thread) :
+	def __init__(self, filename) :
+		self.filename = filename
+		threading.Thread.__init__(self)
+
+	def run(self) :
+		self.proc = subprocess.Popen(['cvlc', self.filename, 'vlc://quit'], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		out, err = self.proc.communicate()
 		self.proc.wait()
 
 # This is so not thread safe that no, just don't. Don't be that guy.

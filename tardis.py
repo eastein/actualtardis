@@ -224,6 +224,9 @@ if __name__ == '__main__' :
 	t = Tardis()
 	t.start()
 
+	threads = list()
+	threads.append(t)
+
 	# setup a zmq subscription to the ZeroMQ lidless api endpoint to determine if someone is 'in'
 	camsub = zmqsub.JSONZMQSub('tcp://127.0.0.1:7200')
 	
@@ -236,6 +239,8 @@ if __name__ == '__main__' :
 
 	state = ST_NONE
 	recording = None
+	already_interlock = False
+
 	# this state must be persisted somehow.
 	working_data = dict()
 	working_data['videos'] = list()
@@ -249,8 +254,10 @@ if __name__ == '__main__' :
 		room_active = camsub.last_msg()
 		if room_active == None :
 			room_active = False
+			print 'did not get a msg from zmq, assuming the room is not active.'
 		else :
-			room_active = ['ratio_busy'] > .4
+			room_active = room_active['ratio_busy']
+			room_active = room_active >= .05
 		
 		if state == ST_NONE and e :
 			if e.input_object.name == "masterstop" and e.value == True :
@@ -266,10 +273,18 @@ if __name__ == '__main__' :
 		if state == ST_NONE :
 			if room_active and working_data['videos'] :
 				if working_data['videos'][0]['deliver'] <= time.time() :
-					t.ioc.set([(23, True)])
+					if not already_interlock :
+						tardisnoise = tardisvideo.PlayMP3('tardis.mp3')
+						tardisnoise.start()
+						threads.append(tardisnoise)
+
+						time.sleep(3)
+						t.ioc.set([(23, True)])
+						already_interlock = True
 
 					if e and e.input_object.name == "interlockopen" and e.value == True :
 						t.ioc.set([(23, False)])
+						already_interlock = False
 
 						video_data = working_data['videos'][0]
 						working_data['videos'].remove(video_data)
@@ -307,4 +322,6 @@ if __name__ == '__main__' :
 	# well, eventually
 	print 'stopping the tardis, because we can'
 	t.stop()
-	t.join()
+
+	for thr in threads :
+		thr.join()
