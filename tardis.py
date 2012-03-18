@@ -3,6 +3,7 @@
 import Queue
 import time
 import pprint
+import os.path
 import threading
 from ramirez.iod import iodclient
 from ramirez.iod import iod_proto
@@ -230,8 +231,15 @@ if __name__ == '__main__' :
 	# setup a zmq subscription to the ZeroMQ lidless api endpoint to determine if someone is 'in'
 	camsub = zmqsub.JSONZMQSub('tcp://127.0.0.1:7200')
 	
+	tdir = os.path.join(os.path.expanduser('~'), '.tardis')
+	try :
+		os.mkdir(tdir)
+	except OSError :
+		pass
+	assert os.path.isdir(tdir)
+
 	# setup a recorder to record/playback video.
-	recorder = tardisvideo.Recorder('/home/eastein/tardis')
+	recorder = tardisvideo.Recorder(tdir)
 	
 	ST_NONE = 0
 	ST_RECORDING = 1
