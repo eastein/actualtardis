@@ -315,7 +315,7 @@ if __name__ == '__main__' :
 				delay = t.get_value("current")
 				if delay :
 					if delay == 10.0 : # if the current dial is for some reason totally out of wack, ignore. FIXME!
-						delay = 10.0
+						delay = 10
 					else :	
 						delay = int(60 * delay)
 				else :
