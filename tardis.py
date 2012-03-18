@@ -10,6 +10,11 @@ from ramirez.iod import iod_proto
 import tardisvideo
 import zmqsub
 
+try :
+	import simplejson as json
+except ImportError :
+	import json
+
 # TODO the manual button is mixed up with the mode:cont switch, need to reroute something.
 
 class Listener(object) :
@@ -27,6 +32,13 @@ class QueueingListener(Listener) :
 	def event(self, event) :
 		print 'new event for queue: %s' % event
 		self.q.put(event)
+
+	def flush(self) :
+		while True :
+			try :
+				e = self.q.get(timeout=0)
+			except Queue.Empty :
+				return
 		
 class InputEvent(object) :
 	def __init__(self, input_object, old_value, value) :
@@ -132,14 +144,42 @@ class Tardis(threading.Thread) :
 			7 : Singular("hvon"),
 			8 : mode,
 			9 : mode,
-			10 : Singular("current"),
-			11 : Singular("dial"),
+			10 : Singular("hours"), # "current"
+			11 : Singular("days"), # the dial 1-1000 under "current"
 			17 : mode,
 			18 : Singular("magic"),
 		}
 		self.qlistener = QueueingListener()
 		for i in set(self.mappings.values()) :
 			i.register(self.qlistener)
+
+		translate_hours_pre = lambda v: Tardis.translate_range(v, 3.3642578125, 0.0, 0.0, 23.0)
+		translate_hours = lambda v: Tardis.translate_interpolate(translate_hours_pre(v), [
+			(0.0, 0.0),
+			(0.245, 1.0),
+			(0.575, 2.0),
+			(0.915, 3.0),
+			(1.38, 4.0),
+			(1.84, 5.0),
+			(2.285, 6.0),
+			(2.95, 7.0),
+			(3.419, 8.0),
+			(4.017, 9.0),
+			(4.651, 10.0),
+			(5.354, 11.0),
+			(6.059, 12.0),
+			(6.990, 13.0),
+			(7.861, 14.0),
+			(8.912, 15.0),
+			(10.13, 16.0),
+			(11.533, 17.0),
+			(12.900, 18.0),
+			(14.6, 19.0),
+			(16.74, 20.0),
+			(18.91, 21.0),
+			(22.683, 22.0),
+			(22.866, 23.0),
+		])
 
 		self.channels = [
 			(0, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
@@ -151,8 +191,8 @@ class Tardis(threading.Thread) :
 			(7, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(8, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(9, iod_proto.CHANNELTYPE_DIGITAL, None),
-			(10, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 3.3642578125, 0.0, 0.0, 10.0)),
-			(11, iod_proto.CHANNELTYPE_ANALOG, lambda v: self.translate_range(v, 0.0, 3.26171875, 0.0, 1000)),
+			(10, iod_proto.CHANNELTYPE_ANALOG, translate_hours),
+			(11, iod_proto.CHANNELTYPE_ANALOG, lambda v: Tardis.translate_range(v, 0.0, 3.26171875, 0.0, 1000)),
 			(17, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(18, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
 			(22, iod_proto.CHANNELTYPE_DIGITALOUT, None),
@@ -172,11 +212,35 @@ class Tardis(threading.Thread) :
 			if i.name == name :
 				return i.state
 
-	def translate_range(self, v, vmin, vmax, tmin, tmax) :
+	@classmethod
+	def translate_range(cls, v, vmin, vmax, tmin, tmax) :
 		# fix inverse function FIXME
 		slope = (tmax - tmin) / (vmax - vmin)
 		t = tmin + (v - vmin) * slope
 		return min(tmax, max(tmin, t))
+
+	"""
+	v value to translate
+	p list of tuples of a, b where a maps to b on output
+
+	Linearly interpolate everything.  Do not extrapolate anything.
+	"""
+	@classmethod
+	def translate_interpolate(cls, v, p) :
+		n = len(p)
+		if v <= p[0][0] :
+			return p[0][1]
+		if v >= p[n-1][0] :
+			return p[n-1][1]
+
+		for i in xrange(n-1) :
+			vmin = p[i][0]
+			vmax = p[i+1][0]
+			tmin = p[i][1]
+			tmax = p[i+1][1]
+			
+			if v >= vmin and v <= vmax :
+				return cls.translate_range(v, vmin, vmax, tmin, tmax)
 
 	def stop(self) :
 		self.ok = False
@@ -220,6 +284,39 @@ class Tardis(threading.Thread) :
 
 		#pprint.pprint(dat)		
 
+class TardisState(object) :
+	def __init__(self, statefile) :
+		self.statefile = statefile
+		self.load()
+
+	def read(self) :
+		if os.path.exists(self.statefile) :
+			fh = open(self.statefile, 'r')
+			try :
+				return json.load(fh)
+			finally :
+				fh.close()
+		else :
+			return {}
+
+	def write(self, state) :
+		if os.path.exists(self.statefile) :
+			f = self.statefile + '.bak'
+			os.rename(self.statefile, f)
+		
+		# TODO handle inability to write, or open, or close? Restore .bak file? What if that fails?
+		fh = open(self.statefile, 'w')
+		try :
+			json.dump(state, fh)
+		finally :
+			fh.close()
+
+	def load(self) :
+		self.state = self.read()
+
+	def save(self) :
+		self.write(self.state)
+
 if __name__ == '__main__' :
 	# setup tardis that polls the iod presumed to be running, start it 
 	t = Tardis()
@@ -238,6 +335,8 @@ if __name__ == '__main__' :
 		pass
 	assert os.path.isdir(tdir)
 
+	tstate = TardisState(os.path.join(tdir, 'state.json'))
+
 	# setup a recorder to record/playback video.
 	recorder = tardisvideo.Recorder(tdir)
 	
@@ -247,11 +346,11 @@ if __name__ == '__main__' :
 
 	state = ST_NONE
 	recording = None
+	tardisnoise = None
 	already_interlock = False
 
-	# this state must be persisted somehow.
-	working_data = dict()
-	working_data['videos'] = list()
+	tstate.state.setdefault('videos', list())
+	tstate.save()
 
 	while True :
 		try :
@@ -265,7 +364,7 @@ if __name__ == '__main__' :
 			print 'did not get a msg from zmq, assuming the room is not active.'
 		else :
 			room_active = room_active['ratio_busy']
-			room_active = room_active >= .05
+			room_active = room_active >= .02
 		
 		if state == ST_NONE and e :
 			if e.input_object.name == "masterstop" and e.value == True :
@@ -279,27 +378,33 @@ if __name__ == '__main__' :
 		
 		# Full Playback: we don't care if anything happened or not. Time happened.
 		if state == ST_NONE :
-			if room_active and working_data['videos'] :
-				if working_data['videos'][0]['deliver'] <= time.time() :
+			if room_active and tstate.state['videos'] :
+				if tstate.state['videos'][0]['deliver'] <= time.time() :
 					if not already_interlock :
-						tardisnoise = tardisvideo.PlayMP3('tardis.mp3')
+						if tardisnoise :
+							tardisnoise.end()
+
+						tardisnoise = tardisvideo.PlayAudio('tardis.mp3')
 						tardisnoise.start()
 						threads.append(tardisnoise)
 
-						time.sleep(3)
 						t.ioc.set([(23, True)])
 						already_interlock = True
 
 					if e and e.input_object.name == "interlockopen" and e.value == True :
+						tardisnoise.end()
 						t.ioc.set([(23, False)])
 						already_interlock = False
 
-						video_data = working_data['videos'][0]
-						working_data['videos'].remove(video_data)
+						video_data = tstate.state['videos'][0]
+						tstate.state['videos'].remove(video_data)
+						tstate.save()
+
 						recording = recorder.load(video_data['filename'])
 
 						# TODO don't cede control completely to playback.
 						recording.playback()
+						t.qlistener.flush()
 
 		# Recording stopper
 		elif state == ST_RECORDING :
@@ -307,29 +412,47 @@ if __name__ == '__main__' :
 			stop_recording = (e and e.input_object.name == "hvoff" and e.value == True) or (time.time() > recording.recording_start + 300)
 
 			if stop_recording :
-				# TODO make the recording end automatically if nobody ends it.  Heartbeat with a timeout.
 				state = ST_NONE
 				recording.end()
 				t.ioc.set([(22, False)])
 
-				delay = t.get_value("current")
-				if delay :
-					if delay == 10.0 : # if the current dial is for some reason totally out of wack, ignore. FIXME!
-						delay = 10
+				delay_hoursegment = t.get_value("hours")
+				if delay_hoursegment :
+					# debug ignore hours...
+					if delay_hoursegment == 23.0 :
+						delay_hoursegment = 24
 					else :	
-						delay = int(60 * delay)
+						# it's hours
+						delay_hoursegment = int(3600 * (24.0 / 23.0) * delay_hoursegment)
 				else :
-					delay = 0
+					delay_hoursegment = 0
 
+				delay_daysegment = t.get_value("days")
+				if delay_daysegment :
+					# TODO use the switch by time dials to turn on and off the use of dates.
+					# large error presently due to hardware difficulties such as "it's analog".
+
+					delay_daysegment = 0#int(3600 * 24 * delay_daysegment)
+				else :
+					delay_daysegment = 0
+
+				delay = delay_hoursegment + delay_daysegment
 				print 'delaying %d seconds' % delay
 
 				deliver = int(time.time()) + delay
 				video_data = {'filename' : recording.filename, 'deliver' : deliver}
-				working_data['videos'].append(video_data)
-				working_data['videos'].sort(cmp=lambda a,b: int.__cmp__(a['deliver'], b['deliver']))
+				tstate.state['videos'].append(video_data)
+				tstate.state['videos'].sort(cmp=lambda a,b: int.__cmp__(a['deliver'], b['deliver']))
+				tstate.save()
+	
 	# well, eventually
 	print 'stopping the tardis, because we can'
 	t.stop()
+
+	# TODO ship a sound with to use here
+	shutdown = tardisvideo.PlayAudio('/usr/share/sounds/speech-dispatcher/test.wav')
+	shutdown.start()
+	threads.append(shutdown)
 
 	for thr in threads :
 		thr.join()

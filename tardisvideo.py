@@ -6,14 +6,13 @@ import time
 import threading
 
 # TODO stuff like not leaving child processes lying around unwaited for, stopping all by default when Video is shutdown
-
 class Recording(object) :
 	def __init__(self, directory, filename=None) :
 		if filename is None :
-			self.filename = tempfile.mktemp(suffix='.mpg', dir=directory)
+			self.filename = tempfile.mktemp(prefix='tardisvideo_', suffix='.mpg', dir=directory)
 			self.recording_start = time.time()
 
-			cmd = ["cvlc", "v4l2://", ":v4l-vdev=/dev/video0", ":input-slave=alsa://hw:0,0", ":alsa-caching=100", "--sout=#transcode{vcodec=mp2v,vb=1024,scale=1,acodec=mp2a,channels=2}:std{access=file,mux=ps,dst=%s}" % self.filename]
+			cmd = ["cvlc", "v4l2://", ":v4l-vdev=/dev/video0", ":input-slave=alsa://hw:0,0", ":alsa-caching=100", "--sout=#transcode{vcodec=mp2v,vb=48,ab=48,scale=1,acodec=mp2a,channels=2,audio-sync}:std{access=file,mux=ps,dst=%s}" % self.filename]
 			#print ' '.join(['"%s"' % a for a in cmd])
 			self.proc = subprocess.Popen(cmd, bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		else :
@@ -35,18 +34,22 @@ class Recording(object) :
 		out, err = self.proc.communicate()
 		self.proc.wait()
 
-class PlayMP3(threading.Thread) :
+class PlayAudio(threading.Thread) :
 	def __init__(self, filename) :
 		self.filename = filename
+		self.done = False
 		threading.Thread.__init__(self)
 
 	def end(self) :
-		os.kill(self.proc.pid, signal.SIGINT)
+		if not self.done :
+			self.done = True
+			os.kill(self.proc.pid, signal.SIGINT)
 
 	def run(self) :
 		self.proc = subprocess.Popen(['cvlc', self.filename, 'vlc://quit'], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		out, err = self.proc.communicate()
 		self.proc.wait()
+		self.done = True
 
 # This is so not thread safe that no, just don't. Don't be that guy.
 class Recorder(object) :
