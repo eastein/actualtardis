@@ -12,7 +12,10 @@ class Recording(object) :
 		if filename is None :
 			self.filename = tempfile.mktemp(suffix='.mpg', dir=directory)
 			self.recording_start = time.time()
-			self.proc = subprocess.Popen(['cvlc', 'v4l2://', ':v4l-vdev=/dev/video0', ':v4l-adev=/dev/audio1', '--sout', '#transcode{vcodec=mp2v,vb=1024,scale=1,acodec=mpga,ab=192,channels=2}:duplicate{dst=std{access=file,mux=mpeg1,dst=%s}}' % self.filename], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+			cmd = ["cvlc", "v4l2://", ":v4l-vdev=/dev/video0", ":input-slave=alsa://hw:0,0", ":alsa-caching=100", "--sout=#transcode{vcodec=mp2v,vb=1024,scale=1,acodec=mp2a,channels=2}:std{access=file,mux=ps,dst=%s}" % self.filename]
+			#print ' '.join(['"%s"' % a for a in cmd])
+			self.proc = subprocess.Popen(cmd, bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		else :
 			self.filename = filename
 
@@ -36,6 +39,9 @@ class PlayMP3(threading.Thread) :
 	def __init__(self, filename) :
 		self.filename = filename
 		threading.Thread.__init__(self)
+
+	def end(self) :
+		os.kill(self.proc.pid, signal.SIGINT)
 
 	def run(self) :
 		self.proc = subprocess.Popen(['cvlc', self.filename, 'vlc://quit'], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
