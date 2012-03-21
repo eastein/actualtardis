@@ -12,7 +12,7 @@ class Recording(object) :
 			self.filename = tempfile.mktemp(prefix='tardisvideo_', suffix='.mpg', dir=directory)
 			self.recording_start = time.time()
 
-			cmd = ["cvlc", "v4l2://", ":v4l-vdev=/dev/video0", ":input-slave=alsa://hw:0,0", ":alsa-caching=100", "--sout=#transcode{vcodec=mp2v,vb=48,ab=48,scale=1,acodec=mp2a,channels=2,audio-sync}:std{access=file,mux=ps,dst=%s}" % self.filename]
+			cmd = ["cvlc", "v4l2://", ":v4l-vdev=/dev/video0", ":input-slave=alsa://hw:0,0", ":alsa-caching=100", "--sout=#transcode{vcodec=mp2v,vb=48,ab=40,scale=1,acodec=mp2a,channels=2,audio-sync}:std{access=file,mux=ps,dst=%s}" % self.filename]
 			#print ' '.join(['"%s"' % a for a in cmd])
 			self.proc = subprocess.Popen(cmd, bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		else :

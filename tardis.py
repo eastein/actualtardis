@@ -2,7 +2,6 @@
 
 import Queue
 import time
-import pprint
 import os.path
 import threading
 from ramirez.iod import iodclient
@@ -30,7 +29,7 @@ class QueueingListener(Listener) :
 		self.q = Queue.Queue()
 
 	def event(self, event) :
-		print 'new event for queue: %s' % event
+		#print 'new event for queue: %s' % event
 		self.q.put(event)
 
 	def flush(self) :
@@ -212,6 +211,11 @@ class Tardis(threading.Thread) :
 			if i.name == name :
 				return i.state
 
+	@property
+	def dir(self) :
+		import tardis
+		return os.path.dirname(os.path.abspath(tardis.__file__))
+
 	@classmethod
 	def translate_range(cls, v, vmin, vmax, tmin, tmax) :
 		# fix inverse function FIXME
@@ -282,8 +286,6 @@ class Tardis(threading.Thread) :
 
 		dat = zip([(self.mappings[m].name, self.mappings[m]) for m in self.mappings])
 
-		#pprint.pprint(dat)		
-
 class TardisState(object) :
 	def __init__(self, statefile) :
 		self.statefile = statefile
@@ -326,8 +328,10 @@ if __name__ == '__main__' :
 	threads.append(t)
 
 	# setup a zmq subscription to the ZeroMQ lidless api endpoint to determine if someone is 'in'
-	camsub = zmqsub.JSONZMQSub('tcp://127.0.0.1:7200')
-	
+	# TODO make this configurable.
+	camsub = zmqsub.JSONZMQSub('tcp://10.100.0.14:7200')
+	logpub = zmqsub.JSONZMQPub('tcp://*:4501')
+
 	tdir = os.path.join(os.path.expanduser('~'), '.tardis')
 	try :
 		os.mkdir(tdir)
@@ -358,14 +362,19 @@ if __name__ == '__main__' :
 		except Queue.Empty :
 			e = None
 
+		if e :
+			logpub.send({'log' : str(e)})
+
 		room_active = camsub.last_msg()
 		if room_active == None :
 			room_active = False
-			print 'did not get a msg from zmq, assuming the room is not active.'
+			logpub.send({'log' : 'did not get a msg from zmq, assuming the room is not active.'})
 		else :
 			room_active = room_active['ratio_busy']
 			room_active = room_active >= .02
 		
+		logpub.send({'room_active' : room_active})
+
 		if state == ST_NONE and e :
 			if e.input_object.name == "masterstop" and e.value == True :
 				break
@@ -373,6 +382,7 @@ if __name__ == '__main__' :
 			# Recording starter
 			elif e.input_object.name == "hvon" and e.value == True :
 				state = ST_RECORDING
+				logpub.send({'log' : 'starting recording'})
 				recording = recorder.record()
 				t.ioc.set([(22, True)])
 		
@@ -382,9 +392,11 @@ if __name__ == '__main__' :
 				if tstate.state['videos'][0]['deliver'] <= time.time() :
 					if not already_interlock :
 						if tardisnoise :
+							logpub.send({'log' : 'stopping tardis sound'})
 							tardisnoise.end()
 
-						tardisnoise = tardisvideo.PlayAudio('tardis.mp3')
+						logpub.send({'log' : 'starting tardis sound'})
+						tardisnoise = tardisvideo.PlayAudio(os.path.join(t.dir, 'tardis.mp3'))
 						tardisnoise.start()
 						threads.append(tardisnoise)
 
@@ -405,13 +417,17 @@ if __name__ == '__main__' :
 						# TODO don't cede control completely to playback.
 						recording.playback()
 						t.qlistener.flush()
-
+				else :
+					logpub.send({'log' : '%d seconds until next video' % (tstate.state['videos'][0]['deliver'] - int(time.time()))})
+			elif room_active :
+				logpub.send({'log' : 'room active but no videos exist'})
 		# Recording stopper
 		elif state == ST_RECORDING :
 			# TODO parameterize timeout
 			stop_recording = (e and e.input_object.name == "hvoff" and e.value == True) or (time.time() > recording.recording_start + 300)
 
 			if stop_recording :
+				logpub.send({'log' : 'ending recording'})
 				state = ST_NONE
 				recording.end()
 				t.ioc.set([(22, False)])
@@ -437,7 +453,7 @@ if __name__ == '__main__' :
 					delay_daysegment = 0
 
 				delay = delay_hoursegment + delay_daysegment
-				print 'delaying %d seconds' % delay
+				logpub.send({'log' : 'delaying %d seconds before deliveryg' % delay})
 
 				deliver = int(time.time()) + delay
 				video_data = {'filename' : recording.filename, 'deliver' : deliver}
@@ -446,9 +462,8 @@ if __name__ == '__main__' :
 				tstate.save()
 	
 	# well, eventually
-	print 'stopping the tardis, because we can'
 	t.stop()
-
+	logpub.send({'log' : 'shutting down the tardis'})
 	# TODO ship a sound with to use here
 	shutdown = tardisvideo.PlayAudio('/usr/share/sounds/speech-dispatcher/test.wav')
 	shutdown.start()

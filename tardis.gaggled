@@ -1,0 +1,26 @@
+gaggled {
+  eventurl tcp://*:3456
+  controlurl tcp://*:3457
+  tick 100
+  startwait 50
+}
+
+iod {
+  command java
+  argv "-jar /home/tardis/jython/jython.jar /home/tardis/git/ramirez/iod/iod.py --nrsdk=/home/tardis/nrsdk-3.7.1-jar-with-dependencies.jar --serial=/dev/ttyACM0 --libpath=/usr/lib/pymodules/python2.6:/usr/lib/python2.6"
+}
+
+tardis {
+  command python
+  argv /home/tardis/git/actualtardis/tardis.py
+  env {
+    PYTHONPATH /home/tardis/git
+  }
+
+  depends {
+    iod {
+      delay 38000
+      propagate true
+    }
+  }
+}
