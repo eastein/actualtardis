@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+
+import time
+import zmqsub
+
+if __name__ == '__main__' :
+	zs = zmqsub.JSONZMQSub('tcp://*:4501')
+	try :
+		while True :
+			try :
+				print '%s %s' % (time.ctime(), zs.recv())
+			except zmqsub.NoMessagesException :
+				pass
+	except KeyboardInterrupt :
+		pass
