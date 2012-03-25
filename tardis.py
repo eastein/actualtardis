@@ -8,11 +8,8 @@ from ramirez.iod import iodclient
 from ramirez.iod import iod_proto
 import tardisvideo
 import zmqsub
-
-try :
-	import simplejson as json
-except ImportError :
-	import json
+import simplejson as json
+import simplejson.decoder
 
 # TODO the manual button is mixed up with the mode:cont switch, need to reroute something.
 
@@ -296,6 +293,8 @@ class TardisState(object) :
 			fh = open(self.statefile, 'r')
 			try :
 				return json.load(fh)
+			except simplejson.decoder.JSONDecodeError :
+				return {}
 			finally :
 				fh.close()
 		else :
