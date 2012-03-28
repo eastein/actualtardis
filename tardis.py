@@ -119,9 +119,10 @@ class Singular(Input) :
 		return self._state
 
 class Tardis(threading.Thread) :
-	def __init__(self) :
+	def __init__(self, logger=None) :
 		threading.Thread.__init__(self)
 		self.ok = True
+		self.logger = logger
 
 		mode = SPDT("mode", {
 			8 : "ext",
@@ -264,6 +265,8 @@ class Tardis(threading.Thread) :
 				d[n] = v
 			else :
 				d[n] = ct(v)
+				if self.logger :
+					self.logger.send({'transformed' : n, 'before' : v, 'after' : d[n]})
 
 		#print 'sample:'
 		for c in d :
@@ -319,17 +322,17 @@ class TardisState(object) :
 		self.write(self.state)
 
 if __name__ == '__main__' :
-	# setup tardis that polls the iod presumed to be running, start it 
-	t = Tardis()
-	t.start()
-
-	threads = list()
-	threads.append(t)
-
 	# setup a zmq subscription to the ZeroMQ lidless api endpoint to determine if someone is 'in'
 	# TODO make this configurable.
 	camsub = zmqsub.JSONZMQSub('tcp://10.100.0.14:7200')
 	logpub = zmqsub.JSONZMQPub('tcp://*:4501')
+
+	# setup tardis that polls the iod presumed to be running, start it 
+	t = Tardis(logger=logpub)
+	t.start()
+
+	threads = list()
+	threads.append(t)
 
 	tdir = os.path.join(os.path.expanduser('~'), '.tardis')
 	try :
