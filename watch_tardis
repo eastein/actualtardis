@@ -16,6 +16,6 @@ if __name__ == '__main__' :
 			try :
 				print '%s %s' % (time.ctime(), zs.recv())
 			except zmqsub.NoMessagesException :
-				pass
+				time.sleep(0.05)
 	except KeyboardInterrupt :
 		pass
