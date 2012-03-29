@@ -376,7 +376,7 @@ if __name__ == '__main__' :
 			room_active = room_active['ratio_busy']
 			room_active = room_active >= .02
 		
-		logpub.send({'room_active' : room_active})
+		logpub.send({'room_active' : room_active, 'n_videos' : len(tstate.state['videos'])})
 
 		if state == ST_NONE and e :
 			if e.input_object.name == "masterstop" and e.value == True :
