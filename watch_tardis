@@ -2,9 +2,15 @@
 
 import time
 import zmqsub
+import sys
 
 if __name__ == '__main__' :
-	zs = zmqsub.JSONZMQSub('tcp://*:4501')
+	try :
+		url = sys.argv[1]
+	except IndexError :
+		url = 'tcp://*:4501'
+
+	zs = zmqsub.JSONZMQSub(url)
 	try :
 		while True :
 			try :
