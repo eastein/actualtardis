@@ -141,8 +141,8 @@ class Tardis(threading.Thread) :
 			7 : Singular("hvon"),
 			8 : mode,
 			9 : mode,
-			10 : Singular("hours"), # "current"
-			11 : Singular("days"), # the dial 1-1000 under "current"
+			12 : Singular("hours"), # "current"
+			13 : Singular("days"), # the dial 1-1000 under "current"
 			17 : mode,
 			18 : Singular("magic"),
 		}
@@ -177,6 +177,7 @@ class Tardis(threading.Thread) :
 			(22.683, 22.0),
 			(22.866, 23.0),
 		])
+		translate_hours = lambda v: Tardis.translate_range(v, 0.0, 5.0, 0.0, 24.0)
 
 		self.channels = [
 			(0, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
@@ -188,8 +189,8 @@ class Tardis(threading.Thread) :
 			(7, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(8, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(9, iod_proto.CHANNELTYPE_DIGITAL, None),
-			(10, iod_proto.CHANNELTYPE_ANALOG, translate_hours),
-			(11, iod_proto.CHANNELTYPE_ANALOG, lambda v: Tardis.translate_range(v, 0.0, 3.26171875, 0.0, 1000)),
+			(12, iod_proto.CHANNELTYPE_ANALOG, translate_hours),
+			(13, iod_proto.CHANNELTYPE_ANALOG, lambda v: Tardis.translate_range(v, 0.0, 3.26171875, 0.0, 1000)),
 			(17, iod_proto.CHANNELTYPE_DIGITAL, None),
 			(18, iod_proto.CHANNELTYPE_DIGITAL, lambda v: not v),
 			(22, iod_proto.CHANNELTYPE_DIGITALOUT, None),
@@ -266,7 +267,7 @@ class Tardis(threading.Thread) :
 			else :
 				d[n] = ct(v)
 				if self.logger :
-					self.logger.send({'transformed' : n, 'before' : v, 'after' : d[n]})
+					pass#self.logger.send({'transformed' : n, 'before' : v, 'after' : d[n]})
 
 		#print 'sample:'
 		for c in d :
@@ -436,12 +437,7 @@ if __name__ == '__main__' :
 
 				delay_hoursegment = t.get_value("hours")
 				if delay_hoursegment :
-					# debug ignore hours...
-					if delay_hoursegment == 23.0 :
-						delay_hoursegment = 24
-					else :	
-						# it's hours
-						delay_hoursegment = int(3600 * (24.0 / 23.0) * delay_hoursegment)
+					delay_hoursegment = int(3600 * delay_hoursegment)
 				else :
 					delay_hoursegment = 0
 
