@@ -30,11 +30,18 @@ class QueueingListener(Listener) :
 		self.q.put(event)
 
 	def flush(self) :
+		got_none = False
+
 		while True :
 			try :
 				e = self.q.get(timeout=0)
+				if e is None :
+					got_none = True
 			except Queue.Empty :
-				return
+				break
+
+		if got_none :
+			self.q.put(None)
 		
 class InputEvent(object) :
 	def __init__(self, input_object, old_value, value) :
@@ -150,33 +157,6 @@ class Tardis(threading.Thread) :
 		for i in set(self.mappings.values()) :
 			i.register(self.qlistener)
 
-		translate_hours_pre = lambda v: Tardis.translate_range(v, 3.3642578125, 0.0, 0.0, 23.0)
-		translate_hours = lambda v: Tardis.translate_interpolate(translate_hours_pre(v), [
-			(0.0, 0.0),
-			(0.245, 1.0),
-			(0.575, 2.0),
-			(0.915, 3.0),
-			(1.38, 4.0),
-			(1.84, 5.0),
-			(2.285, 6.0),
-			(2.95, 7.0),
-			(3.419, 8.0),
-			(4.017, 9.0),
-			(4.651, 10.0),
-			(5.354, 11.0),
-			(6.059, 12.0),
-			(6.990, 13.0),
-			(7.861, 14.0),
-			(8.912, 15.0),
-			(10.13, 16.0),
-			(11.533, 17.0),
-			(12.900, 18.0),
-			(14.6, 19.0),
-			(16.74, 20.0),
-			(18.91, 21.0),
-			(22.683, 22.0),
-			(22.866, 23.0),
-		])
 		translate_hours = lambda v: Tardis.translate_range(v, 0.0, 5.0, 0.0, 24.0)
 
 		self.channels = [
@@ -203,7 +183,8 @@ class Tardis(threading.Thread) :
 		try :
 			self.ioc.setup(self.chans)
 		except iod_proto.IODFailure :
-			print 'failed setup, must restart iod to reset, continuing.'
+			if self.logger :
+				self.logger.send({'log' : 'failed setup, must restart iod to reset, continuing.'})
 
 	def get_value(self, name) :
 		for i in self.mappings.values() :
@@ -250,8 +231,14 @@ class Tardis(threading.Thread) :
 	
 	def run(self) :
 		while self.ok :
-			t.sample()
-			time.sleep(.1)
+			try :
+				t.sample()
+				time.sleep(.1)
+			except iod_proto.IODFailure :
+				if self.logger :
+					self.logger.send({'log' : 'failed in communicating with iod, sending a None signal to indicate termination and exiting the thread.'})
+				self.qlistener.q.put(None)
+				return
 
 	def sample(self) :
 		dat = dict()
@@ -362,6 +349,9 @@ if __name__ == '__main__' :
 	while True :
 		try :
 			e = t.qlistener.q.get(timeout=1)
+			if e is None :
+				logpub.send({'log' : 'tardis sensors lost connection, shutting down'})
+				break
 		except Queue.Empty :
 			e = None
 
