@@ -30,7 +30,7 @@ class Recording(object) :
 			print repr((out, err))
 
 	def playback(self) :
-		self.proc = subprocess.Popen(['vlc', '--fullscreen', self.filename, 'vlc://quit'], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		self.proc = subprocess.Popen(['vlc', '--no-osd', '--fullscreen', self.filename, 'vlc://quit'], bufsize=1048576, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		out, err = self.proc.communicate()
 		self.proc.wait()
 
